@@ -3,7 +3,7 @@ package main
 import (
     "fmt"
     "os"
-    // "os/exec"
+    "os/exec"
     "time"
     "github.com/gdamore/tcell"
     "github.com/gdamore/tcell/encoding"
@@ -28,37 +28,31 @@ func emitStr(s tcell.Screen, x, y int, style tcell.Style, str string) {
     }
 }
 
-// const (
-//  RuneFilled = '█'
-//  RunEmptyCircle = '○'
-//  RunePipeV = '║'
-//  RunePipeUR = '╗'
-//  RunePipeLR = '╝'
-//  RunePipeUL = '╔'
-//  RunePipeLL = '╚'
-//  RunePipeH = '═'
-// )
 
 type Msg int
-
 const (
     Next Msg = iota
     Prev
     Paus
-    // Exit
     Tick
+    Loud
 )
 
-// type CmdMsg int
+type CmdMsg int
+const (
+    SayStretch CmdMsg = iota
+    SayTimeRemaining
+)
 
 
 type Model struct{
     isPaused bool
+    sayExercises bool
     stretchIDX int
     currentTicks int
     ticksPerStretch int
     stretches []string
-    // user_input chan int
+    sideEffects chan int
 }
 
 func tick(m Model) Model {
@@ -68,25 +62,21 @@ func tick(m Model) Model {
     if m.stretchIDX > len(m.stretches) {
         return m
     }
+    m.sideEffects <- int(SayTimeRemaining)
     m.currentTicks += 1
+
     if m.currentTicks >= m.ticksPerStretch {
         m = nextStretch(m)
-        // m.stretchIDX += 1
-        // m.currentTicks = 0
     }
     return m
 }
 
 
 func nextStretch(m Model) Model {
-    if len(m.stretches) > m.stretchIDX - 1 {
-        // s.Clear()
+    if m.stretchIDX  < len(m.stretches) - 1 {
         m.stretchIDX += 1
         m.currentTicks = 0
-        // whatToSay := fmt.Sprintf("%s", m.stretches[m.stretchIDX])
-        // cmd := exec.Command("say", whatToSay)
-        // emitStr(s, 2, 1, tcell.StyleDefault, whatToSay)
-        // cmd.Run()
+        m.sideEffects <- int(SayStretch)
     }
     return m
 }
@@ -94,13 +84,8 @@ func nextStretch(m Model) Model {
 func lastStretch(m Model) Model {
     if m.stretchIDX > 0 {
         m.stretchIDX -= 1
+        m.sideEffects <- int(SayStretch)
     }
-    // s.Clear()
-    // m.currentTicks = 0
-    // whatToSay := fmt.Sprintf("%s", m.stretches[m.stretchIDX])
-    // cmd := exec.Command("say", whatToSay)
-    // emitStr(s, 2, 1, tcell.StyleDefault, whatToSay)
-    // cmd.Run()
     return m
 }
 
@@ -115,35 +100,27 @@ func display(m Model, s tcell.Screen) {
     // TODO check if model is different
     s.Clear()
     displayInstructions(s)
-    if len(m.stretches) > m.stretchIDX - 1 {
-        whatToSay := fmt.Sprintf("%s", m.stretches[m.stretchIDX])
-        emitStr(s, 2, 1, tcell.StyleDefault, whatToSay);
-    } else {
+    if  m.stretchIDX == len(m.stretches) - 1  && m.currentTicks >= m.ticksPerStretch {
         whatToSay := "All done!"
         emitStr(s, 2, 1, tcell.StyleDefault, whatToSay);
-        // s.Clear()
-        // emitStr(s, 2, 1, tcell.StyleDefault, "All done!")
-        // cmd := exec.Command("say", "All done")
-        // cmd.Run()
+    } else {
+        whatToSay := fmt.Sprintf("%s", m.stretches[m.stretchIDX])
+        emitStr(s, 2, 1, tcell.StyleDefault, whatToSay);
     }
+
     if m.isPaused {
         emitStr(s, 2, 10, tcell.StyleDefault, "Paused")
     }
+
+    if !m.sayExercises {
+        emitStr(s, 2, 11, tcell.StyleDefault, "Quiet")
+    }
+
     emitStr(s, 2, 9, tcell.StyleDefault, fmt.Sprintf("%d s", m.ticksPerStretch - m.currentTicks))
     s.Show()
 }
 
 func tick_once_per_second(m Model, s tcell.Screen, ui chan int) {
-
-    // w, h := s.Size()
-    // white := tcell.StyleDefault.
-        // Foreground(tcell.ColorWhite).Background(tcell.ColorRed)
-
-    // emitStr(s, 2, 5, white, "Press ESC exit")
-    // displayInstructions(s)
-    // emitStr(s, 2, 1, tcell.StyleDefault, "Press p to start")
-    // s.Show()
-
     lastTime :=  time.Now()
     go func() {
         for {
@@ -153,74 +130,72 @@ func tick_once_per_second(m Model, s tcell.Screen, ui chan int) {
                 ui <- int(Tick)
             }
             display(m, s)
-            time.Sleep(200*time.Millisecond)
+            time.Sleep(100*time.Millisecond)
         }
     }()
+    go func() {
+        for msg := range m.sideEffects {
+            switch unwrappedMsg := CmdMsg(msg); unwrappedMsg {
+            case SayStretch:
+                // TODO need to lock this with mutexes?
+                if m.sayExercises && m.stretchIDX < len(m.stretches) {
+                    cmd := exec.Command("say", m.stretches[m.stretchIDX])
+                    cmd.Run()
+                }
+            case SayTimeRemaining:
+                ticksLeft := m.ticksPerStretch - m.currentTicks
+                if m.sayExercises &&  ticksLeft > 0 && ticksLeft <= 3 {
+                    cmd := exec.Command("say", fmt.Sprintf("%d", m.ticksPerStretch - m.currentTicks))
+                    cmd.Run()
+                }
+            }
+        }
+    }()
+
     for msg := range ui {
-        switch wakka := Msg(msg); wakka {
+        switch unwrappedMsg := Msg(msg); unwrappedMsg {
         case Next:
             m = nextStretch(m)
         case Prev:
             m = lastStretch(m)
         case Paus:
             m.isPaused = !m.isPaused
+        case Loud:
+            m.sayExercises = !m.sayExercises
         case Tick:
             m = tick(m)
         }
     }
-
-    // for {
-    //     now := time.Now()
-    //     if now.Sub(lastTime).Milliseconds() > 1000 {
-    //         m = tick(m, s)
-    //         lastTime = lastTime.Add(time.Duration(1000*Time.Milliseconds))
-    //     }
-    //     if m.isPaused {
-    //         emitStr(s, 2, 10, tcell.StyleDefault, "Paused")
-    //     }
-    //     emitStr(s, 2, 9, tcell.StyleDefault, fmt.Sprintf("%d s", m.ticksPerStretch - m.currentTicks))
-
-    //     s.Show()
-    // }
+    close(m.sideEffects)
 }
+
+
 func grabUserInput(s tcell.Screen, ui chan int) {
     for {
         ev := s.PollEvent()
         switch ev := ev.(type) {
         case *tcell.EventResize:
             s.Sync()
-            // s.SetContent(w-1, h-1, 'R', nil, st)
         case *tcell.EventKey:
             if ev.Key() == tcell.KeyEscape {
-                // cmd := exec.Command("say", "Good bye")
-                // cmd.Run()
-                // return
-                // ui <- Msg.Exit
                 close(ui)
             } else {
                 switch ch := ev.Rune(); ch {
                 case 'f':
                     ui <- int(Next)
-                    // m = nextStretch(m, s)
                 case 'b':
                     ui <- int(Prev)
-                    // m = lastStretch(m, s)
                 case 'p':
                     ui <- int(Paus)
-                    // //                                    "Paused"
-                    // emitStr(s, 2, 10, tcell.StyleDefault, "      ")
-                    // m.isPaused = !m.isPaused
+                case 'v':
+                    ui <- int(Loud)
                 }
-
-                // ev.Rune() == 'n' {
-                // }
-                // if ev.Rune() == 'C' || ev.Rune() == 'c' {
-                //  s.Clear()
-                // }
             }
         }
     }
 }
+
+
 func main() {
 
     encoding.Register()
@@ -240,9 +215,10 @@ func main() {
         Background(tcell.ColorBlack).
         Foreground(tcell.ColorWhite)
     s.SetStyle(defStyle)
-    // s.EnableMouse()
     s.Clear()
+
     ui := make(chan int)
+    se := make(chan int)
     go grabUserInput(s, ui)
 
     stretches := []string{
@@ -273,9 +249,6 @@ func main() {
         "Twist, Left Leg Over",
         "Twist, Right Leg Over",
     }
-    m := Model{true, 0, 0, 33, stretches}
+    m := Model{true, true, 0, 0, 33, stretches, se}
     tick_once_per_second(m, s, ui)
-    // Println outputs a line to stdout.
-    // It comes from the package fmt.
-    // fmt.Printf("%c\n", RuneFilled)
 }
