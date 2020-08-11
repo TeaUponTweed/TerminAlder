@@ -42,6 +42,7 @@ type CmdMsg int
 const (
     SayStretch CmdMsg = iota
     SayTimeRemaining
+    SayAllDone
 )
 
 
@@ -62,8 +63,10 @@ func tick(m Model) Model {
     if m.stretchIDX > len(m.stretches) {
         return m
     }
-    m.sideEffects <- int(SayTimeRemaining)
     m.currentTicks += 1
+    if m.currentTicks < m.ticksPerStretch {
+        m.sideEffects <- int(SayTimeRemaining)
+    }
 
     if m.currentTicks >= m.ticksPerStretch {
         m = nextStretch(m)
@@ -86,9 +89,12 @@ func lastStretch(m Model) Model {
         m.stretchIDX -= 1
         m.sideEffects <- int(SayStretch)
     }
+    m.currentTicks = 0
+
     return m
 }
 
+// func finished(m Model) bool
 func displayInstructions(s tcell.Screen) {
     emitStr(s, 2, 2, tcell.StyleDefault, "Press f/b to go to next/previous stretches")
     emitStr(s, 2, 3, tcell.StyleDefault, "Press p to toggle pause")
