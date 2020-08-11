@@ -154,6 +154,14 @@ func tick_once_per_second(m Model, s tcell.Screen, ui chan int) {
                     cmd := exec.Command("say", fmt.Sprintf("%d", m.ticksPerStretch - m.currentTicks))
                     cmd.Run()
                 }
+                if m.sayExercises &&  ticksLeft == 30 {
+                    cmd := exec.Command("say", "start")
+                    cmd.Run()
+                }
+                if m.sayExercises &&  ticksLeft == 15 {
+                    cmd := exec.Command("say", "half way")
+                    cmd.Run()
+                }
             }
         }
     }()
@@ -227,34 +235,50 @@ func main() {
     se := make(chan int)
     go grabUserInput(s, ui)
 
-    stretches := []string{
-        "Left Arm Across",
-        "Right Arm Across",
-        "Left Arm Over and Behind Head",
-        "Right Arm Over and Behind Head",
-        "Left Arm Behind Back",
-        "Right Arm Behind Back",
-        "Neck Left",
-        "Neck Up",
-        "Neck Right",
-        "Neck Down",
-        "Left Calf Stretch",
-        "Right Calf Stretch",
-        "Left Calf Stretch",
-        "Right Calf Stretch",
-        "Touch Toes",
-        "Wide Touch Toes",
-        "Touch Toes",
-        "Right Quadracep",
-        "Left Quadracep",
-        "Left Foot Forward Lunge",
-        "Right Foot Forward Lunge",
-        "Left Foot Crossed Over Right Knee",
-        "Right Foot Crossed Over Left Knee",
-        "Legs Diamond, Lean Forward",
-        "Twist, Left Leg Over",
-        "Twist, Right Leg Over",
-    }
-    m := Model{true, true, 0, 0, 33, stretches, se}
+    // stretches := []string{
+    //     "Left Arm Across",
+    //     "Right Arm Across",
+    //     "Left Arm Over and Behind Head",
+    //     "Right Arm Over and Behind Head",
+    //     "Left Arm Behind Back",
+    //     "Right Arm Behind Back",
+    //     "Neck Left",
+    //     "Neck Up",
+    //     "Neck Right",
+    //     "Neck Down",
+    //     "Left Calf Stretch",
+    //     "Right Calf Stretch",
+    //     "Left Calf Stretch",
+    //     "Right Calf Stretch",
+    //     "Touch Toes",
+    //     "Wide Touch Toes",
+    //     "Touch Toes",
+    //     "Right Quadracep",
+    //     "Left Quadracep",
+    //     "Left Foot Forward Lunge",
+    //     "Right Foot Forward Lunge",
+    //     "Left Foot Crossed Over Right Knee",
+    //     "Right Foot Crossed Over Left Knee",
+    //     "Legs Diamond, Lean Forward",
+    //     "Twist, Left Leg Over",
+    //     "Twist, Right Leg Over",
+    // }
+    // m := Model{true, true, 0, 0, 33, stretches, se}
+
+	stretches := []string{
+		"Jumping Jacks",
+		"Pushups",
+		"Wall Sit",
+		"Crunches",
+		"Squats",
+		"Dips",
+		"Plank",
+		"Lunges",
+		"Pushups with Rotation",
+		"Side Plank Left",
+		"Side Plank Right",
+	}
+
+    m := Model{true, true, 0, 0, 38, stretches, se}
     tick_once_per_second(m, s, ui)
 }
